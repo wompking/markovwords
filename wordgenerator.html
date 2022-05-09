@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<style type="text/css">
+			body {
+				background-color: rgb(25,25,25);
+				color: rgb(158,215,43);
+				font-family: "noto sans";
+				margin: 0;
+			}
+			.light {
+				color: white;
+			}
+			textarea {
+				resize: none;
+				border: none;
+				font-family: "noto sans mono", monospace;
+				background: rgb(34, 38, 30);
+				color: rgb(158,215,43);
+			}
+			.fullwidth {
+				width: 100%;
+			}
+			textarea:hover {
+				background: rgb(34, 43, 30);
+			}
+			textarea:focus {
+				background: rgb(34, 50, 30);
+			}
+			input[type='button'] {
+				background-color: #bbb;
+				border-radius: 1px;
+				color: #fff;
+				font-family: "noto sans";
+				border: none;
+				background: rgb(50,50,50);
+			}
+			input[type='number'] {
+				background-color: #bbb;
+				border-radius: 1px;
+				color: #fff;
+				font-family: "noto sans";
+				border: none;
+				background: rgb(50,50,50);
+			}
+			input[type='button']:hover {
+				border: none;
+				background: rgb(68,76,60);
+			}
+			input[type='number']:hover {
+				background: rgb(50,56,50);
+			}
+			.page-container {
+				display: grid;
+				place-content: stretch stretch;
+				grid-template-columns: 5px auto 1fr 9px;
+				grid-template-rows: 60px auto auto auto auto auto 50px auto 0px;
+				grid-template-areas: 
+					"tbar tbar tbar tbar"
+					"spc5 cdfn cdft spac"
+					"spc5 repn rept spac"
+					"spc5 blkn blkt spac"
+					"spc5 whtn whtt spac"
+					"spc5 mrkn mrkt spac"
+					"ctrl ctrl ctrl ctrl"
+					"spc3 outp outp spc2"
+					"spc4 spc4 spc4 spc4";
+				width: 100%;
+				height: 100%;
+				column-gap: 5px;
+				row-gap: 5px;
+				background: rgb(50, 50, 50);
+			}
+			.titlebar {
+				grid-area: tbar;
+				place-self: stretch stretch;
+				background: rgb(30,30,30);
+				align-items: center;
+				justify-items: center;
+				display: grid;
+				font-size: 40px;
+			}
+			.grid-item-name {
+				place-self: stretch stretch;
+				background: rgb(70, 70, 70);
+				align-items: center;
+				justify-items: right;
+				display: grid;
+				margin-right: 5px;
+			}
+			.categorydef-name {
+				grid-area: cdfn;
+				place-self: stretch stretch;
+			}
+			.categorydef-text {
+				grid-area: cdft;
+			}
+			.replace-name {
+				grid-area: repn;
+				place-self: stretch stretch;
+			}
+			.replace-text {
+				grid-area: rept;
+			}
+			.blacklist-name {
+				grid-area: blkn;
+				place-self: stretch stretch;
+			}
+			.blacklist-text {
+				grid-area: blkt;
+			}
+			.whitelist-name {
+				grid-area: whtn;
+				place-self: stretch stretch;
+			}
+			.whitelist-text {
+				grid-area: whtt;
+			}
+			.markov-name {
+				grid-area: mrkn;
+				place-self: stretch stretch;
+			}
+			.markov-text {
+				grid-area: mrkt;
+			}
+			.controls {
+				grid-area: ctrl;
+				place-self: stretch stretch;
+				background: rgb(70, 70, 70);
+				align-items: center;
+				justify-items: center;
+				text-align:center;
+				display: flex;
+				flex-direction: column;
+				justify-content: center;
+			}
+			.output {
+				grid-area: outp;
+			}
+			.grid-item-text {
+				align-self: center;
+				align-items: center;
+				justify-items: center;
+			}
+			.controls-center {
+				margin:auto;
+				display: flex;
+				justify-content: center;
+				align-items: center;
+			}
+			.space {
+				margin-left: 10px;
+				margin-right: 10px;
+			}
+			.spacesmall {
+				margin-left: 5px;
+				margin-right: 5px;
+			}
+			.popup {
+				position: fixed;
+				display: flex;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				/*height: 0;*/
+				background: rgba(60, 60, 60, 0.8);
+				align-items: center;
+				justify-items: center;
+				text-align: center;
+				flex-direction: column;
+				justify-content: center;
+			}
+			.hidden {
+				display: none !important;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="page-container">
+			<div class="titlebar">
+				MARKOVWORDS
+			</div>
+			<div class="categorydef-name grid-item-name light">
+				<div class="spacesmall">Category definitions:</div>
+			</div>
+			<div class="categorydef-text grid-item-text">
+				<textarea rows="3" cols="60" id="categoryDefText" placeholder="V = a/e/i/o/u; C = p/t/k/b/r/m" class="fullwidth autoResize"></textarea>
+			</div>
+			<div class="replace-name grid-item-name light">
+				<div class="spacesmall">Automatic replacement:</div>
+			</div>
+			<div class="replace-text grid-item-text">
+				<textarea rows="3" cols="60" id="replaceText" placeholder="/mb/ => &#34;nb&#34;; /ou/ => &#34;o-&#34;" class="fullwidth autoResize"></textarea>
+			</div>
+			<div class="blacklist-name grid-item-name light">
+				<div class="spacesmall">Blacklist:</div>
+			</div>
+			<div class="blacklist-text grid-item-text">
+				<textarea rows="3" cols="60" id="blacklistText" placeholder="/ma/" class="fullwidth autoResize"></textarea>
+			</div>
+			<div class="whitelist-name grid-item-name light">
+				<div class="spacesmall">Whitelist:</div>
+			</div>
+			<div class="whitelist-text grid-item-text">
+				<textarea rows="3" cols="60" id="whitelistText" placeholder="/br/" class="fullwidth autoResize"></textarea>
+			</div>
+			<div class="markov-name grid-item-name light">
+				<div class="spacesmall">Markov chain definition:</div>
+			</div>
+			<div class="markov-text grid-item-text">
+				<textarea rows="3" cols="60" id="markovText" placeholder="S &#34;C&#34; => (N1 50%, H 50%); N1 &#34;V&#34; => (S 50%, H 50%)" class="fullwidth autoResize"></textarea>
+			</div>
+			<div class="controls grid-item-head light">
+				<div class="controls-center">
+					<label for="words">Number of words:</label> <div class="spacesmall"></div>
+					<input type="number" id="words" name="words" min="1" value="10"> <div class="space"></div>
+					<label for="newline">Newline each:</label> <div class="spacesmall"></div>
+					<input type="checkbox" id="newline" name="newline" class="check"> <div class="space"></div>
+					<label for="filterdup">Filter duplicates:</label> <div class="spacesmall"></div>
+					<input type="checkbox" id="filterdup" name="filterdup" class="check"> <div class="space"></div>
+					<input type="button" id="saveButton" name="saveButton" value="Save as JSON"> <div class="space"></div>
+					<input type="button" id="loadButton" name="loadButton" value="Load from JSON"> <div class="space"></div>
+					<input type="button" id="generate" name="generate" value="Generate words">
+				</div>
+			</div>
+			<div class="output">
+				<textarea rows="6" cols="60" id="outputText" placeholder="Words appear here" readonly class="fullwidth"></textarea>
+			</div>
+		</div>
+		<div class="popup hidden" id="saveJSON">
+			<textarea rows="6" cols="60" id="saveJSONText" placeholder="Encoded JSON goes here" readonly></textarea>
+			<div>
+				<input type="button" id="copySaveJSON" name="copySaveJSON" value="Copy JSON">
+				<input type="button" id="okSaveJSON" name="okSaveJSON" value="Back">
+			</div>
+		</div>
+		<div class="popup hidden" id="loadJSON">
+			<textarea rows="6" cols="60" id="loadJSONText" placeholder="Paste encoded JSON here"></textarea>
+			<div>
+				<input type="button" id="okLoadJSON" name="okLoadJSON" value="Confirm">
+				<input type="button" id="noLoadJSON" name="noLoadJSON" value="Cancel">
+			</div>
+		</div>
+	</body>
+	<script>
+		Array.prototype.choose_random = function(){
+			return this[Math.floor(Math.random()*this.length)]
+		}
+		function encodeUnicode(str) {
+			// first we use encodeURIComponent to get percent-encoded UTF-8,
+			// then we convert the percent encodings into raw bytes which
+			// can be fed into btoa.
+			return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+				function toSolidBytes(match, p1) {
+					return String.fromCharCode('0x' + p1);
+			}));
+		}
+		function decodeUnicode(str) {
+			// Going backwards: from bytestream, to percent-encoding, to original string.
+			return decodeURIComponent(atob(str).split('').map(function (c) {
+				return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+			}).join(''));
+		}
+
+		function weighted_random(options){
+			var i;
+
+			var weights = [];
+
+			for (i = 0; i < options.length; i++){
+				weights[i] = options[i][1] + (weights[i - 1] || 0);
+			}
+			
+			var random = Math.random() * weights[weights.length - 1];
+			
+			for (i = 0; i < weights.length; i++){
+				if (weights[i] > random){
+					break;
+				}
+			}
+			
+			return options[i][0];
+		}
+		
+		function getVars(){
+			const categoryDefText	= document.getElementById("categoryDefText").value;
+			const replaceText		= document.getElementById("replaceText").value;
+			const blacklistText		= document.getElementById("blacklistText").value;
+			const whitelistText		= document.getElementById("whitelistText").value;
+			const markovText		= document.getElementById("markovText").value;
+			
+			var catdefs = {};
+			categoryDefText.split(";").map(a=>a.split("=").map(b=>b.trim())).filter(a=>a.length==2).map(a=>[a[0],a[1].split("/")]).forEach(a=>{
+				catdefs[a[0]] = a[1];
+			});
+			var whitelist = null
+			if ((whitelistText[0] == "/")&&(whitelistText.slice(-1) == "/")){
+				whitelist = RegExp(whitelistText.slice(1,-1));
+			}
+			var blacklist = null
+			if ((blacklistText[0] == "/")&&(blacklistText.slice(-1) == "/")){
+				blacklist = RegExp(blacklistText.slice(1,-1));
+			}
+			var replace = replaceText.split(";").map(a=>a.split("=>").map(b=>b.trim())).filter(a=>a.length==2).filter(a=>(a[0][0] == "/")&&(a[0].slice(-1) == "/")&&(a[1][0] == '"')&&(a[1].slice(-1) == '"')).map(a=>[RegExp(a[0].slice(1,-1),'g'),a[1].slice(1,-1)]);
+
+			var markov = {}
+
+			markovText.split(";").map(a=>a.split("=>").map(b=>b.trim())).filter(a=>a.length==2).map(a=>{
+				const markovFromIndex = a[0].indexOf('"');
+				if (markovFromIndex == -1){
+					return null;
+				}
+				var markovFromHalves = [a[0].slice(0,markovFromIndex).trim(),a[0].slice(markovFromIndex)];
+				if ((markovFromHalves[1][0] != '"') || (markovFromHalves[1].slice(-1) != '"')){
+					return null;
+				} else {
+					markovFromHalves[1] = markovFromHalves[1].slice(1,-1);
+				}
+				if ((a[1][0] != "(") || (a[1].slice(-1) != ")")){
+					return null;
+				}
+				var markovRest = []
+				var markovToPieces = a[1].slice(1,-1).split(",").map(v=>v.trim().split(" ").map(u=>u.trim())).filter(v=>v.length==2).map(v=>{
+					var scale = 1;
+					var num = v[1];
+					if (num.slice(-1) == "%"){
+						scale = 0.01;
+						num = num.slice(0,-1);
+					} else if (num.slice(-1) == "p"){
+						num = num.slice(0,-1);
+						markovRest.push([v[0],parseFloat(num)]);
+						num = null
+					}
+					num = parseFloat(num) * scale;
+					if ((num) || (num === 0)){
+						//console.log("+1");
+						return [v[0],num];
+					}
+				}).filter(v=>(v!=undefined)).filter(v=>((v[1] <= 1) && (v[1] >= 0)));
+				markovRest = markovRest.filter(v=>(v!=undefined)).filter(v=>(v[1] >= 0));
+				const cumProb = markovToPieces.map(v=>v[1]).reduce((x,y)=>x+y,0);
+				if (cumProb > 1){
+					return null;
+				}
+				if (cumProb < 1){
+					restProb = 1-cumProb
+					if (markovRest.length){
+						const cumDiv = markovRest.map(v=>v[1]).reduce((x,y)=>x+y,0);
+						//console.log(cumDiv,markovRest)
+						markovRest.forEach(v=>{
+							markovToPieces.push([v[0],v[1]*restProb/cumDiv]);
+						});
+					} else {
+						markovToPieces.push(["H",restProb]);
+					}
+				}
+				markovFromHalves.push(markovToPieces);
+				return markovFromHalves;
+			}).filter(a=>a!==null).forEach(a=>{
+				markov[a[0]] = a.slice(1);
+			});
+
+			return [parseInt(document.getElementById("words").value),document.getElementById("filterdup").checked,catdefs,replace,blacklist,whitelist,markov]
+		}
+		function generateWords(count,filterdup,catdef,repl,blacklist,whitelist,markovchain){
+			var outWords = [];
+			// console.log(repl);
+			//console.log(markovchain);
+			var tries = 0
+			while ((outWords.length < count) && (tries < 10000)){
+				tries++;
+				var node = "S"
+				var charcounter = 0
+				var outWord = ""
+				while ((node != "H") && (charcounter <= 10000)){
+					let get = markovchain[node];
+					if (!get){
+						break
+					}
+					// console.log(get[0]);
+					// console.log(get[1]);
+					get[0].split("").forEach(getChar=>{
+						var chars = getChar;
+						while (chars.length){
+							char = chars[0]
+							chars = chars.slice(1)
+							if (catdef[char] === undefined){
+								outWord += char;
+							} else {
+								chars = catdef[char].choose_random() + chars;
+							}
+						}
+					});
+					node = weighted_random(get[1]);
+					charcounter++;
+				}
+				repl.forEach(rep=>{
+					outWord = outWord.replaceAll(rep[0],rep[1]);
+				});
+
+				if (outWord.length == 1000){
+					outWords.push(outWord);
+					break;
+				}
+				if (whitelist && !outWord.match(whitelist)){
+					continue;
+				}
+				if (blacklist && outWord.match(blacklist)){
+					continue;
+				}
+				if ((outWords.indexOf(outWord) >= 0) && filterdup){
+					continue;
+				}
+				outWords.push(outWord);
+			}
+			return outWords
+		}
+		function updateFull(){
+			const words = generateWords(...getVars());
+			const spacer = document.getElementById("newline").checked ? "\n" : " ";
+			const outText = document.getElementById("outputText");
+			outText.value = words.join(spacer);
+			outText.style.height = "auto";
+			outText.style.height = (outText.scrollHeight) + "px";
+		}
+		
+		function autoResize(id,input){
+			const tx = document.getElementById(id);
+			tx.setAttribute("style", "height:" + (tx.scrollHeight) + "px;overflow-y:hidden;");
+			if (input){
+				tx.addEventListener("input", OnInput, false);
+			}
+		}
+
+		function switchPopup(id, state, autoResizeVal){
+			return function inner(){
+				if (state){
+					document.getElementById(id).classList.remove("hidden");
+				} else {
+					document.getElementById(id).classList.add("hidden");
+				}
+				document.getElementById(id).childNodes.forEach(el=>{
+					if (el.tagName == "TEXTAREA"){
+						autoResize(el.id,autoResizeVal);
+					}
+				});
+			}
+		}
+
+		function OnInput() {
+			this.style.height = "auto";
+			this.style.height = (this.scrollHeight) + "px";
+		}
+
+		function saveButton(){
+			const categoryDefText	= document.getElementById("categoryDefText").value;
+			const replaceText		= document.getElementById("replaceText").value;
+			const blacklistText		= document.getElementById("blacklistText").value;
+			const whitelistText		= document.getElementById("whitelistText").value;
+			const markovText		= document.getElementById("markovText").value;
+
+			const outObj = {
+				"catDef":categoryDefText,
+				"replace":replaceText,
+				"blacklist":blacklistText,
+				"whitelist":whitelistText,
+				"markov":markovText
+			};
+			document.getElementById("saveJSONText").value = encodeUnicode(JSON.stringify(outObj));
+			switchPopup("saveJSON", true, false)();
+		}
+
+		function copyJSON(){
+			document.getElementById('saveJSONText').select();
+			document.execCommand('copy');
+		}
+
+		function loadButton(){
+			document.getElementById("loadJSONText").value = "";
+			switchPopup("loadJSON", true, true)();
+		}
+
+		function loadJSON(){
+			const inObj = JSON.parse(decodeUnicode(document.getElementById("loadJSONText").value));
+
+			document.getElementById("categoryDefText").value = inObj["catDef"];
+			document.getElementById("replaceText").value	 = inObj["replace"];
+			document.getElementById("blacklistText").value	 = inObj["blacklist"];
+			document.getElementById("whitelistText").value	 = inObj["whitelist"];
+			document.getElementById("markovText").value		 = inObj["markov"];
+			switchPopup("loadJSON", false, false)();
+		}
+
+		document.getElementById("saveButton").onclick = saveButton;
+		document.getElementById("okSaveJSON").onclick = switchPopup("saveJSON", false, false);
+		document.getElementById("copySaveJSON").onclick = copyJSON;
+
+		document.getElementById("loadButton").onclick = loadButton;
+		document.getElementById("okLoadJSON").onclick = loadJSON;
+		document.getElementById("noLoadJSON").onclick = switchPopup("loadJSON", false, false);
+		
+		
+		document.getElementById("generate").onclick = updateFull;
+		const txs = document.getElementsByTagName("textarea");
+		for (let i = 0; i < txs.length; i++) {
+			const tx = txs[i];
+			const id = tx.id;
+			const resize = document.getElementById(id).classList.contains("autoResize");
+			autoResize(id,resize);
+		}
+
+		
+	</script>
+</html>
