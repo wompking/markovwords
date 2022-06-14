@@ -395,9 +395,27 @@
 					node = weighted_random(get[1]);
 					charcounter++;
 				}
-				repl.forEach(rep=>{
-					outWord = outWord.replaceAll(rep[0],rep[1]);
-				});
+				let repsLength = 0;
+				// /[HL]~/ => "";
+				let replIdx = 0; 
+				while (replIdx < repl.length) {
+					let rep = repl[replIdx]
+					if (rep[0].test(outWord)){
+						// console.log(rep[0],outWord);
+						outWord = outWord.replaceAll(rep[0],rep[1]);
+						replIdx = 0;
+					} else {
+						replIdx++;
+					}
+					// console.log(replIdx);
+					if (repsLength == 10000){
+						break;
+					}
+					repsLength++;
+				}
+				// repl.forEach(rep=>{
+				// 	outWord = outWord.replaceAll(rep[0],rep[1]);
+				// });
 
 				if (outWord.length == 1000){
 					outWords.push(outWord);
