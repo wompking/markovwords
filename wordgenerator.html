@@ -249,6 +249,7 @@
 		const MAX_WORD_LENGTH	= 1e3;
 		const MAX_REPLACE_STEPS	= 1e4;
 		const EPSILON           = 1e-10;
+		const DEBUG             = false;
 
 		Array.prototype.choose_random = function(){
 			return this[Math.floor(Math.random()*this.length)]
@@ -292,7 +293,7 @@
 		function searchString(string, search){
 			// console.log(string, search);
 			let searchSorted = JSON.parse(JSON.stringify(search));
-			searchSorted.sort(a=>a.length);
+			searchSorted.sort((a,b)=>b.length-a.length);
 			// console.log(searchSorted);
 			stringList = [{"data":string, "found":false}];
 			for (var i = 0; i < searchSorted.length; i++) {
@@ -604,7 +605,7 @@
 			while ((outWords.length < count) && (tries < MAX_TRIES)){
 				tries++;
 				let node = "S";
-				// let nodeLog = "S"
+				let nodeLog = "S"
 				let charcounter = 0;
 				let outWord = "";
 				let vars = {};
@@ -693,7 +694,7 @@
 
 					if (cumulativeProb > 1+EPSILON){
 						node = "H";
-						// nodeLog += " - H";
+						nodeLog += " - H";
 						continue;
 					}
 
@@ -731,13 +732,16 @@
 					// console.log(JSON.stringify(transitionsActual));
 
 					node = weighted_random(transitionsActual);
-					// nodeLog += " - " + node;
+					nodeLog += " - " + node;
 
 					//console.log(node);
 
 					charcounter++;
 				}
-				// console.log(nodeLog)
+				if (DEBUG){
+					console.log(nodeLog)
+					console.log(outWord)
+				}
 				let repsLength = 0;
 				// /[HL]~/ => "";
 				let replIdx = 0; 
