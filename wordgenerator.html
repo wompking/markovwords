@@ -211,7 +211,7 @@
 			<div class="markov-text grid-item-text">
 				<textarea rows="3" cols="60" id="markovText" placeholder="S &#34;C&#34; => (N1 50%, H 50%); N1 &#34;V&#34; => (S 50%, H 50%)" class="fullwidth autoResize"></textarea>
 			</div>
-			<div class="controls grid-item-head light">
+			<div class="controls light">
 				<div class="controls-center">
 					<label for="words">Number of words:</label> <div class="spacesmall"></div>
 					<input type="number" id="words" name="words" min="1" value="10"> <div class="space"></div>
@@ -244,6 +244,12 @@
 		</div>
 	</body>
 	<script>
+		const MAX_TRIES			= 1e4;
+		const MAX_SEQUENCE		= 1e3;
+		const MAX_WORD_LENGTH	= 1e3;
+		const MAX_REPLACE_STEPS	= 1e4;
+		const EPSILON           = 1e-10;
+
 		Array.prototype.choose_random = function(){
 			return this[Math.floor(Math.random()*this.length)]
 		}
@@ -264,15 +270,15 @@
 		}
 
 		function weighted_random(options){
-			var i;
+			let i;
 
-			var weights = [];
+			let weights = [];
 
 			for (i = 0; i < options.length; i++){
-				weights[i] = options[i][1] + (weights[i - 1] || 0);
+				weights[i] = options[i].weight + (weights[i - 1] || 0);
 			}
 			
-			var random = Math.random() * weights[weights.length - 1];
+			let random = Math.random() * weights[weights.length - 1];
 			
 			for (i = 0; i < weights.length; i++){
 				if (weights[i] > random){
@@ -280,7 +286,51 @@
 				}
 			}
 			
-			return options[i][0];
+			return options[i].data;
+		}
+
+		function searchString(string, search){
+			// console.log(string, search);
+			let searchSorted = JSON.parse(JSON.stringify(search));
+			searchSorted.sort(a=>a.length);
+			// console.log(searchSorted);
+			stringList = [{"data":string, "found":false}];
+			for (var i = 0; i < searchSorted.length; i++) {
+				let s = searchSorted[i];
+				let idx = 0;
+				while (idx < stringList.length){
+					let g = stringList[idx];
+					// console.log(s, g)
+					if (!g.found){
+						let d = g.data.indexOf(s);
+						if (d !== -1){
+							let l = s.length;
+							let beforeString = g.data.slice(0,d);
+							let afterString = g.data.slice(d+l);
+							// console.log(beforeString, s, afterString);
+							let beforeList = stringList.slice(0,idx);
+							let afterList = stringList.slice(idx+1);
+							// console.log(beforeList,afterList);
+
+							stringList = beforeList;
+							if (beforeString){
+								stringList.push({"data":beforeString,"found":false});
+							}
+							stringList.push({"data":s,"found":true});
+							if (afterString){
+								stringList.push({"data":afterString,"found":false});
+							}
+							afterList.forEach(a=>stringList.push(a));
+							idx = 0;
+						} else {
+							idx++;
+						}
+					} else { 
+						idx++;
+					}					
+				}
+			}
+			return stringList;
 		}
 		
 		function getVars(){
@@ -290,111 +340,404 @@
 			const whitelistText		= document.getElementById("whitelistText").value;
 			const markovText		= document.getElementById("markovText").value;
 			
-			var catdefs = {};
-			categoryDefText.split(";").map(a=>a.split("=").map(b=>b.trim())).filter(a=>a.length==2).map(a=>[a[0],a[1].split("/")]).forEach(a=>{
-				catdefs[a[0]] = a[1];
+			let catdefs = {};
+			let catdefsList = [];
+			let catdefsTrue = false;
+			categoryDefText.split(";").map(a=>a.split("=").map(b=>b.trim())).filter(a=>a.length==2).map(a=>[a[0],a[1].split("/")]).map(a=>{
+				catdefsList.push(a[0]);
+				catdefsTrue = true;
+				return a;
+			}).forEach(a=>{
+				catdefs[a[0]] = a[1].map(b=>searchString(b,catdefsList.filter(c=>c!==a[0])));
 			});
-			var whitelist = null
+			// console.log(catdefsList,catdefs);
+			let whitelist = null;
 			if ((whitelistText[0] == "/")&&(whitelistText.slice(-1) == "/")){
 				whitelist = RegExp(whitelistText.slice(1,-1));
 			}
-			var blacklist = null
+			let blacklist = null;
 			if ((blacklistText[0] == "/")&&(blacklistText.slice(-1) == "/")){
 				blacklist = RegExp(blacklistText.slice(1,-1));
 			}
-			var replace = replaceText.split(";").map(a=>a.split("=>").map(b=>b.trim())).filter(a=>a.length==2).filter(a=>(a[0][0] == "/")&&(a[0].slice(-1) == "/")&&(a[1][0] == '"')&&(a[1].slice(-1) == '"')).map(a=>[RegExp(a[0].slice(1,-1),'g'),a[1].slice(1,-1)]);
+			let replace = replaceText.split(";").map(a=>a.split("=>").map(b=>b.trim())).filter(a=>a.length==2).filter(a=>(a[0][0] == "/")&&(a[0].slice(-1) == "/")&&(a[1][0] == '"')&&(a[1].slice(-1) == '"')).map(a=>[RegExp(a[0].slice(1,-1),'g'),a[1].slice(1,-1)]);
 
-			var markov = {}
+			let markov = {}
 
 			markovText.split(";").map(a=>a.split("=>").map(b=>b.trim())).filter(a=>a.length==2).map(a=>{
-				const markovFromIndex = a[0].indexOf('"');
-				if (markovFromIndex == -1){
+				let r1 = /(\S+?) *"(.+?)" *(\[( *([+-]\S+?)+? *)\])?/;
+				let r2 = /\(( *(\S+? (\d+%|\d+(\.\d+)?p?)(\[\S+\])?,? *)*)\)/;
+				//console.log(a);
+
+				let m1 = a[0].match(r1);
+				let m2 = a[1].match(r2);
+
+				// console.log(m1, m2)
+				
+				if (!m1){
 					return null;
 				}
-				var markovFromHalves = [a[0].slice(0,markovFromIndex).trim(),a[0].slice(markovFromIndex)];
-				if ((markovFromHalves[1][0] != '"') || (markovFromHalves[1].slice(-1) != '"')){
+				if (!m2){
 					return null;
+				}
+
+				let data = {
+					"nodeName": m1[1],
+					"nodeText": m1[2],
+					"nodeVars": m1[4],
+					"nodeTransitions": m2[1].trim().split(",").map(v=>v.trim())
+				};
+
+				if (data['nodeText']){
+					// console.log(catdefsList, data['nodeText']);
+					data['nodeText'] = searchString(data['nodeText'], catdefsList);
 				} else {
-					markovFromHalves[1] = markovFromHalves[1].slice(1,-1);
+					data['nodeText'] = [];
 				}
-				if ((a[1][0] != "(") || (a[1].slice(-1) != ")")){
-					return null;
-				}
-				var markovRest = []
-				var markovToPieces = a[1].slice(1,-1).split(",").map(v=>v.trim().split(" ").map(u=>u.trim())).filter(v=>v.length==2).map(v=>{
-					var scale = 1;
-					var num = v[1];
-					if (num.slice(-1) == "%"){
-						scale = 0.01;
-						num = num.slice(0,-1);
-					} else if (num.slice(-1) == "p"){
-						num = num.slice(0,-1);
-						markovRest.push([v[0],parseFloat(num)]);
-						num = null
+
+				if (data['nodeVars']){
+					let vars = [];
+					let acc = "";
+					for (var i = 0; i < data['nodeVars'].length; i++) {
+						let c = data['nodeVars'][i];
+						//console.log(acc, c)
+						switch (c){
+							case "+":
+							case "-":
+								if (acc){
+									vars.push({"add":acc[0]=="+", "var":acc.slice(1)});
+								}
+								acc = c;
+							break;
+							default:
+								acc += c;
+							break;
+						}
 					}
-					num = parseFloat(num) * scale;
-					if ((num) || (num === 0)){
-						//console.log("+1");
-						return [v[0],num];
+					if (acc){
+						vars.push({"add":acc[0]=="+", "var":acc.slice(1)});
 					}
-				}).filter(v=>(v!=undefined)).filter(v=>((v[1] <= 1) && (v[1] >= 0)));
-				markovRest = markovRest.filter(v=>(v!=undefined)).filter(v=>(v[1] >= 0));
-				const cumProb = markovToPieces.map(v=>v[1]).reduce((x,y)=>x+y,0);
-				if (cumProb > 1){
-					return null;
+					// console.log(vars)
+					data['nodeVars'] = vars;
+				} else {
+					data['nodeVars'] = [];
 				}
-				if (cumProb < 1){
-					restProb = 1-cumProb
-					if (markovRest.length){
-						const cumDiv = markovRest.map(v=>v[1]).reduce((x,y)=>x+y,0);
-						//console.log(cumDiv,markovRest)
-						markovRest.forEach(v=>{
-							markovToPieces.push([v[0],v[1]*restProb/cumDiv]);
-						});
-					} else {
-						markovToPieces.push(["H",restProb]);
-					}
+
+				if (data['nodeTransitions']){
+					let rt = /^(\S+?) *(\S+?) *(\[(\S+)\])?$/;
+					data['nodeTransitions'] = data['nodeTransitions'].map(v=>v.match(rt)).map(v=>{
+						//console.log("v",v);
+						let transitionData = {};
+						if (v){
+							transitionData['node'] = v[1];
+							if (v[2].slice(-1) == "%"){
+								transitionData['chance'] = parseFloat(v[2].slice(0,-1)) * 0.01;
+								transitionData['absolute'] = true;
+							} else if (v[2].slice(-1) == "p"){
+								transitionData['chance'] = parseFloat(v[2].slice(0,-1));
+								transitionData['absolute'] = false;
+							} else {
+								transitionData['chance'] = parseFloat(v[2]);
+								transitionData['absolute'] = true;
+							}
+							//console.log("d", transitionData);
+
+							if (v[4]){
+								let parse = [];
+								//console.log("v4", v[4]);
+								let acc = "";
+								for (var i = 0; i < v[4].length; i++) {
+									let c = v[4][i];
+									switch (c){
+										case "(":
+										case ")":
+										case "+":
+										case "*":
+										case "^":
+										case "~":
+											if (acc){
+												parse.push(acc);
+												acc = "";
+											}
+											parse.push(c);
+										break;
+										default:
+											acc += c;
+										break;
+									}
+								}
+								if (acc){
+									parse.push(acc);
+								}
+
+								let idx = 0;
+								while (idx < parse.length){
+									let c = parse[idx];
+									if (c === "~"){
+										let before = [];
+										let middle = [];
+										let after = [];
+										if (parse[idx+1] === "("){
+											let parens = 1;
+											let j = 0;
+											while ((j < parse.length) && parens){
+												j++;
+												let s = parse[j];
+												if (s == "("){
+													parens++;
+												} else if (s == ")"){
+													parens--;
+												}
+											}
+											before = parse.slice(0,idx);
+											middle = parse.slice(idx+1,j);
+											after = parse.slice(j+1);
+										} else if (parse[idx+1]) {
+											before = parse.slice(0,idx);
+											middle = [parse[idx+1]];
+											after = parse.slice(idx+2);
+										}
+										parse = before;
+										if (middle){
+											middle.forEach(a=>parse.push(a));
+										}
+										parse.push(-1);
+										if (after){
+											after.forEach(a=>parse.push(a));
+										}
+										idx = 0;
+									} else {
+										idx++;
+									}
+								}
+
+								let opStack = [];
+								let outStack = [];
+								let precedence = {
+									"~":3,
+									"*":2,
+									"^":1,
+									"+":0
+								};
+
+								//console.log("p1", parse, opStack, outStack);
+
+								for (var i = 0; i < parse.length; i++) {
+									let p = parse[i];
+									//console.log("p2",p, JSON.stringify(opStack), JSON.stringify(outStack));
+									switch (p){
+										case -1:
+										case "*":
+										case "+":
+										case "^":
+											let o1 = p;
+											if (p === -1){
+												o1 = "~";
+											}
+											let o2 = opStack.slice(-1);
+											while ((o2 !== "(") && (precedence[o2] >= precedence[o1])){
+												outStack.push(opStack.pop());
+												o2 = opStack.slice(-1);
+											}
+											opStack.push(o1);
+										break;
+
+										case "(":
+											opStack.push("(");
+										break;
+
+										case ")":
+											let o = opStack.slice(-1)[0];
+											while (o !== "("){
+												//console.log("o", o, opStack.length)
+												if (!(opStack.length)){
+													return null;
+												}
+												outStack.push(opStack.pop());
+												o = opStack.slice(-1)[0];
+											}
+											if (o !== "("){
+												return null;
+											}
+											opStack.pop();
+										break;
+
+										default:
+											outStack.push(p);
+										break;
+									}
+								}
+
+								while (opStack.length){
+									let c = opStack.pop();
+									if (c == "("){
+										return null;
+									}
+									outStack.push(c);
+								}
+
+								//console.log("p2", parse, outStack);
+								transitionData['expr'] = outStack;
+							} else {
+								transitionData['expr'] = null;
+							}
+						}
+						return transitionData;
+					}).filter(a=>a);
+				} else {
+					data['nodeTransitions'] = [{"to":"H","type":"absolute","chance":1,"type":"absolute","expr":null}];
 				}
-				markovFromHalves.push(markovToPieces);
-				return markovFromHalves;
-			}).filter(a=>a!==null).forEach(a=>{
-				markov[a[0]] = a.slice(1);
+
+				return data;
+			}).filter(a=>a).forEach(a=>{
+				markov[a['nodeName']] = a;
 			});
+
+			// console.log(markov)
 
 			return [parseInt(document.getElementById("words").value),document.getElementById("filterdup").checked,catdefs,replace,blacklist,whitelist,markov]
 		}
 		function generateWords(count,filterdup,catdef,repl,blacklist,whitelist,markovchain){
-			var outWords = [];
+			let outWords = [];
 			// console.log(repl);
 			//console.log(markovchain);
-			var tries = 0
-			while ((outWords.length < count) && (tries < 10000)){
+			let tries = 0;
+			while ((outWords.length < count) && (tries < MAX_TRIES)){
 				tries++;
-				var node = "S"
-				var charcounter = 0
-				var outWord = ""
-				while ((node != "H") && (charcounter <= 10000)){
+				let node = "S";
+				// let nodeLog = "S"
+				let charcounter = 0;
+				let outWord = "";
+				let vars = {};
+				while ((node != "H") && (charcounter <= MAX_SEQUENCE)){
 					let get = markovchain[node];
 					if (!get){
-						break
+						break;
 					}
-					// console.log(get[0]);
-					// console.log(get[1]);
-					get[0].split("").forEach(getChar=>{
-						var chars = getChar;
-						while (chars.length){
-							char = chars[0]
-							chars = chars.slice(1)
-							if (catdef[char] === undefined){
-								outWord += char;
-							} else {
-								chars = catdef[char].choose_random() + chars;
+
+					// console.log(get);
+
+					let chars = get['nodeText'].map(a=>a);
+
+					while (chars.length){
+						// console.log(JSON.stringify(chars))
+						let g = chars.shift();
+						// console.log("g",g)
+						if (g.found){
+							// console.log("d", catdef[g.data]);
+							let newChars = catdef[g.data].choose_random().map(a=>a);
+							// console.log(JSON.stringify(newChars));
+							chars.forEach(c=>newChars.push(c));
+							chars = newChars;
+						} else {
+							outWord += g.data;
+						}
+					}
+					// console.log()
+
+					get.nodeVars.forEach(v=>{
+						vars[v['var']] = v['add'];
+					});
+					// console.log("v", JSON.stringify(vars));
+
+					let transitionsFilter = get['nodeTransitions'].filter(a=>{
+						if (a.expr){
+							// console.log(a.expr);
+							let stack = [];
+							for (var i = 0; i < a.expr.length; i++) {
+								// console.log("i", i, a.expr[i], stack);
+								let c1 = false;
+								let c2 = false;
+								switch (a.expr[i]){
+
+									case "~":
+										stack.push(!stack.pop());
+									break;
+
+									case "+":
+										c1 = stack.pop();
+										c2 = stack.pop();
+										stack.push(c1 || c2);
+									break;
+
+									case "*":
+										c1 = stack.pop();
+										c2 = stack.pop();
+										stack.push(c1 && c2);
+									break;
+
+									case "^":
+										c1 = stack.pop();
+										c2 = stack.pop();
+										stack.push(c1 ^ c2);
+									break;
+
+									default:
+										// console.log(vars)
+										stack.push(vars[a.expr[i]]);
+									break;
+								}
 							}
+							return stack.pop();
+						} else {
+							return true;
 						}
 					});
-					node = weighted_random(get[1]);
+
+					let cumulativeProb = 0;
+
+					transitionsFilter.forEach(t=>{
+						if (t.absolute){
+							cumulativeProb += t.chance;
+						}
+					});
+
+					if (cumulativeProb > 1+1e-10){
+						node = "H";
+						// nodeLog += " - H";
+						continue;
+					}
+
+					let transitionsActual = [];
+
+					transitionsFilter.forEach(t=>{
+						if (t.absolute){
+							transitionsActual.push({"weight":t.chance, "data":t.node});
+						}
+					});
+
+					if (cumulativeProb < 1){
+						let leftProb = 1-cumulativeProb;
+						let cumulativeWeight = 0;
+						transitionsFilter.forEach(t=>{
+							if (!t.absolute){
+								cumulativeWeight += t.chance;
+							}
+						});
+						if (cumulativeWeight){
+							transitionsFilter.forEach(t=>{
+								if (!t.absolute){
+									transitionsActual.push({"weight":leftProb * (t.chance/cumulativeWeight), "data":t.node});
+									cumulativeProb += leftProb * (t.chance/cumulativeWeight);
+								}
+							});
+						}
+					}
+
+					if (cumulativeProb < 1){
+						let leftProb = 1-cumulativeProb;
+						transitionsActual.push({"weight":leftProb, "data":"H"});
+					}
+
+					// console.log(JSON.stringify(transitionsActual));
+
+					node = weighted_random(transitionsActual);
+					// nodeLog += " - " + node;
+
+					//console.log(node);
+
 					charcounter++;
 				}
+				// console.log(nodeLog)
 				let repsLength = 0;
 				// /[HL]~/ => "";
 				let replIdx = 0; 
@@ -408,7 +751,7 @@
 						replIdx++;
 					}
 					// console.log(replIdx);
-					if (repsLength == 10000){
+					if (repsLength == MAX_REPLACE_STEPS){
 						break;
 					}
 					repsLength++;
@@ -417,7 +760,7 @@
 				// 	outWord = outWord.replaceAll(rep[0],rep[1]);
 				// });
 
-				if (outWord.length == 1000){
+				if (outWord.length == MAX_WORD_LENGTH){
 					outWords.push(outWord);
 					break;
 				}
