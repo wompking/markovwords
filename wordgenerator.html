@@ -364,7 +364,7 @@
 			let markov = {}
 
 			markovText.split(";").map(a=>a.split("=>").map(b=>b.trim())).filter(a=>a.length==2).map(a=>{
-				let r1 = /(\S+?) *"(.+?)" *(\[( *([+-]\S+?)+? *)\])?/;
+				let r1 = /(\S+?) *"(.*?)" *(\[( *([+-]\S+?)+? *)\])?/;
 				let r2 = /\(( *(\S+? (\d+%|\d+(\.\d+)?p?)(\[\S+\])?,? *)*)\)/;
 				//console.log(a);
 
